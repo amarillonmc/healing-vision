@@ -2,7 +2,11 @@
 
 通过输入卡片效果文本生成 YGOPRO 可用的 Lua 脚本。
 
-**v0.2.0 新功能**: 现在支持使用 Claude Code 或 OpenCode CLI 的内置 LLM，无需额外配置 API 密钥！
+**✨ 现在支持在 Claude Code/OpenCode 中直接对话生成脚本！**
+
+只需打开项目，然后说："生成卡片 10000000，效果：..."即可！
+
+查看 [QUICKSTART_CLAUDE.md](./QUICKSTART_CLAUDE.md) 快速开始。
 
 ## 功能特性
 
@@ -66,6 +70,22 @@ npm run build
 ```
 
 ## 使用方法
+
+### 在 Claude Code/OpenCode 中直接使用（推荐）
+
+**这是最简单的方式！** 在 Claude Code 或 OpenCode 中打开此项目，然后直接对话：
+
+```
+Generate card 10000000 with effect: "这张卡召唤成功时，可以破坏对方场上一张卡"
+```
+
+或者：
+
+```
+生成卡片 10000001，效果："当这张卡通常召唤成功时，可以抽一张卡"
+```
+
+查看 [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) 了解更多详情。
 
 ### 命令行工具
 

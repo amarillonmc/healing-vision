@@ -14,6 +14,7 @@
     "extract-api": "tsx src/data/extract-api.ts",
     "test": "tsx test/test-example.ts",
     "test:cli-llm": "tsx test/test-cli-llm.ts",
+    "skill": "node .claude/skills/generate.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
