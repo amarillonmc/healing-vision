@@ -4,17 +4,60 @@
 
 ## 目录
 
+- [快速开始](#快速开始)
 - [基本用法](#基本用法)
 - [效果类型示例](#效果类型示例)
 - [高级功能](#高级功能)
 - [API 参考](#api-参考)
+
+## 快速开始
+
+### 方式1: 使用文件（推荐用于复杂效果）
+
+创建一个包含效果文本的文件 `effect.txt`：
+
+```
+Return all cards you control to the bottom of your deck in any order, if you do, gain 1200 LP for each, if 5+ cards have been returned to the deck this way, also skip your opponent's next Battle Phase.
+```
+
+然后运行：
+
+```bash
+npm run dev -- generate -i 10000000 -f effect.txt -l en-US --use-cli-llm
+```
+
+**注意**: 在 `dev` 后面需要加 `--`，这样才能正确传递参数到 tsx。
+
+### 方式2: 使用内联效果文本（简单效果）
+
+```bash
+npm run dev -- generate -i 10000000 -e "这张卡召唤成功时，可以破坏对方场上一张卡" -l zh-CN
+```
+
+### 方式3: 构建后使用（推荐）
+
+```bash
+# 首先构建项目
+npm run build
+
+# 然后使用构建后的 CLI（内联文本）
+npx ygo-gen generate -i 10000000 -e "Return all cards you control to the bottom of your deck in any order, if you do, gain 1200 LP for each" -l en-US --use-cli-llm
+
+# 或使用文件
+npx ygo-gen generate -i 10000000 -f effect.txt -l en-US --use-cli-llm
+```
+
+**重要提示**:
+- 当通过 `npm run dev` 运行时，**必须在命令前加 `--`**（如 `npm run dev -- generate ...`）才能正确传递参数
+- 对于包含逗号、空格等特殊字符的复杂效果文本，强烈建议使用文件方式（`-f`）
+- 如果没有 Claude Code 或 OpenCode 安装，`--use-cli-llm` 会自动回退到基本生成器
 
 ## 基本用法
 
 ### 1. 解析效果文本
 
 ```bash
-npm run dev parse "这张卡召唤成功时，可以破坏对方场上一张卡"
+npm run dev -- parse "这张卡召唤成功时，可以破坏对方场上一张卡"
 ```
 
 输出：
@@ -35,27 +78,29 @@ Keywords: 破坏, destroy, 场上, field, 召唤成功
 ### 2. 生成完整脚本
 
 ```bash
-npm run dev generate -i 10000000 -e "效果文本" -l zh-CN
+npm run dev -- generate -i 10000000 -e "效果文本" -l zh-CN
 ```
 
 参数说明：
 - `-i, --id <number>`: 卡片 ID
 - `-e, --effect <text>`: 效果文本或文件路径
+- `-f, --file <path>`: 效果文本文件路径（替代 -e）
 - `-l, --lang <language>`: 语言 (zh-CN, en-US, ja-JP)
 - `-o, --output <path>`: 输出目录 (默认: ./output)
 - `--setcode <number>`: 自定义 setcode
 - `--dry-run`: 只打印不写入文件
+- `--use-cli-llm`: 使用 CLI 内置 LLM（需要 Claude Code 或 OpenCode）
 
 ### 3. 搜索卡片
 
 ```bash
-npm run dev search "黑魔术士" -l zh-CN
+npm run dev -- search "黑魔术士" -l zh-CN
 ```
 
 ### 4. 查看卡片信息
 
 ```bash
-npm run dev info 10000000 -l zh-CN
+npm run dev -- info 10000000 -l zh-CN
 ```
 
 ## 效果类型示例
@@ -65,7 +110,7 @@ npm run dev info 10000000 -l zh-CN
 **效果文本**: "这张卡可以丢弃1张手牌，破坏对方场上一张卡。"
 
 ```bash
-npm run dev parse "一回合一次，可以丢弃1张手牌，选择对方场上1张卡破坏。"
+npm run dev -- parse "一回合一次，可以丢弃1张手牌，选择对方场上1张卡破坏。"
 ```
 
 生成代码结构：
@@ -85,7 +130,7 @@ end
 **效果文本**: "这张卡召唤成功时，可以抽1张卡。"
 
 ```bash
-npm run dev parse "这张卡召唤成功时，可以从卡组抽1张卡。"
+npm run dev -- parse "这张卡召唤成功时，可以从卡组抽1张卡。"
 ```
 
 生成代码结构：
@@ -105,7 +150,7 @@ end
 **效果文本**: "这张卡的攻击力上升500。"
 
 ```bash
-npm run dev parse "这张卡的攻击力上升500。"
+npm run dev -- parse "这张卡的攻击力上升500。"
 ```
 
 生成代码结构：
@@ -124,7 +169,7 @@ end
 **效果文本**: "对方回合也能发动，丢弃1张手牌，使这张卡的攻击力上升1000。"
 
 ```bash
-npm run dev parse "对方回合也能发动，丢弃1张手牌，这张卡的攻击力上升1000。"
+npm run dev -- parse "对方回合也能发动，丢弃1张手牌，这张卡的攻击力上升1000。"
 ```
 
 生成代码结构：
@@ -147,13 +192,13 @@ end
 对于复杂效果，可以使用 LLM 进行辅助生成：
 
 ```bash
-npm run dev generate -i 10000000 -e "复杂效果文本" --use-llm
+npm run dev -- generate -i 10000000 -e "复杂效果文本" --use-llm
 ```
 
 ### 自定义 Setcode
 
 ```bash
-npm run dev generate -i 10000000 -e "效果文本" --setcode 0x1234
+npm run dev -- generate -i 10000000 -e "效果文本" --setcode 0x1234
 ```
 
 ### 批量生成

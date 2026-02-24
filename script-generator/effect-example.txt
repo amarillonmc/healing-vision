@@ -1,0 +1,1 @@
+Return all cards you control to the bottom of your deck in any order, if you do, gain 1200 LP for each, if 5+ cards have been returned to the deck this way, also skip your opponent's next Battle Phase.

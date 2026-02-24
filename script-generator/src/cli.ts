@@ -21,7 +21,8 @@ program
   .command('generate')
   .description('Generate a Lua script for a card')
   .requiredOption('-i, --id <number>', 'Card ID')
-  .requiredOption('-e, --effect <text>', 'Effect text (or path to file)')
+  .option('-e, --effect <text>', 'Effect text (or path to file). For complex effects, use a file path instead.')
+  .option('-f, --file <path>', 'Path to file containing effect text (alternative to -e)')
   .option('-l, --lang <language>', 'Language (zh-CN, en-US, ja-JP)', 'zh-CN')
   .option('-o, --output <path>', 'Output directory', './output')
   .option('--setcode <number>', 'Custom setcode')
@@ -34,9 +35,18 @@ program
     const language = options.lang as Language;
     const outputDir = options.output;
 
-    let effectText = options.effect;
-    if (fs.existsSync(effectText)) {
-      effectText = fs.readFileSync(effectText, 'utf-8');
+    // Get effect text from either -e, -f, or stdin
+    let effectText = '';
+    if (options.file) {
+      effectText = fs.readFileSync(options.file, 'utf-8');
+    } else if (options.effect) {
+      effectText = options.effect;
+      if (fs.existsSync(effectText)) {
+        effectText = fs.readFileSync(effectText, 'utf-8');
+      }
+    } else {
+      console.error('Error: Either --effect or --file must be specified');
+      process.exit(1);
     }
 
     console.log(`Generating script for card ${cardId}...`);
@@ -62,8 +72,10 @@ program
       const useAPI = options.useLlm;
       const needsLLM = CLILLMGenerator.needsLLM(parsedEffects);
 
-      if (useCLI && needsLLM) {
-        console.log('Using CLI built-in LLM for complex effects...');
+      // 当用户明确指定 --use-cli-llm 时，强制使用 CLI LLM
+      // 否则，仅当效果复杂到需要 LLM 时才使用
+      if (useCLI) {
+        console.log('Using CLI built-in LLM...');
         const cliLlmGenerator = createCLILLMGenerator({
           provider: options.llmProvider === 'auto-detect' ? undefined : options.llmProvider,
         });
