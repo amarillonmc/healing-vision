@@ -1,5 +1,5 @@
 import { KEYWORD_MAPPINGS, TRIGGER_PATTERNS, EFFECT_STRUCTURE, KeywordMapping } from './keyword-map.js';
-import { Categories, EffectTypes, Events, Locations, Phases } from '../constants/api.js';
+import { Categories, EffectTypes, Events, Locations, Phases, Types } from '../constants/api.js';
 
 export interface ParsedEffect {
   id: string;
@@ -23,19 +23,23 @@ export interface ParseResult {
   cardId: number;
   rawText: string;
   language: string;
+  cardType?: number; // 卡片类型：怪兽/魔法/陷阱
 }
 
 export class EffectParser {
-  
-  parse(effectText: string, cardId: number = 0, language: string = 'zh-CN'): ParseResult {
+  private cardType: number = 0; // 卡片类型
+
+  parse(effectText: string, cardId: number = 0, language: string = 'zh-CN', cardType?: number): ParseResult {
+    this.cardType = cardType || 0;
     const effects = this.splitEffects(effectText);
     const parsedEffects = effects.map((text, index) => this.parseSingleEffect(text, index));
-    
+
     return {
       effects: parsedEffects,
       cardId,
       rawText: effectText,
       language,
+      cardType: this.cardType,
     };
   }
   
@@ -143,26 +147,53 @@ export class EffectParser {
   
   private detectEffectType(text: string, triggerEvent?: string): string {
     const lowerText = text.toLowerCase();
-    
+
+    // 陷阱卡和魔法卡的特殊处理
+    const isTrap = (this.cardType & Types.TRAP) !== 0;
+    const isSpell = (this.cardType & Types.SPELL) !== 0;
+    const isMonster = (this.cardType & Types.MONSTER) !== 0;
+
+    // 对于陷阱卡和魔法卡，第一个效果通常是激活效果
+    if (isTrap || isSpell) {
+      if (triggerEvent) {
+        if (lowerText.includes('可以') || lowerText.includes('能')) {
+          return 'EFFECT_TYPE_QUICK_O'; // 即时诱发效果
+        }
+        return 'EFFECT_TYPE_TRIGGER_F'; // 诱发必发效果
+      }
+      // 没有触发事件的陷阱卡效果是诱发即时效果
+      if (lowerText.includes('即时') || lowerText.includes('quick')) {
+        return 'EFFECT_TYPE_QUICK_O';
+      }
+      return 'EFFECT_TYPE_TRIGGER_O'; // 默认为诱发效果
+    }
+
+    // 怪兽卡的效果类型判断
     if (triggerEvent) {
       if (lowerText.includes('可以') || lowerText.includes('能')) {
         return 'EFFECT_TYPE_TRIGGER_O';
       }
       return 'EFFECT_TYPE_TRIGGER_F';
     }
-    
-    if (lowerText.includes('自己') && lowerText.includes('回合') && lowerText.includes('能')) {
+
+    // 检测诱发即时效果（Quick Effect）
+    if (lowerText.includes('即时') || lowerText.includes('quick') ||
+        (lowerText.includes('对手') && lowerText.includes('回合') && lowerText.includes('能'))) {
       return 'EFFECT_TYPE_QUICK_O';
     }
-    
+
+    // 检测起动效果
     if (lowerText.includes('主要阶段') && !lowerText.includes('对手')) {
       return 'EFFECT_TYPE_IGNITION';
     }
-    
-    if (lowerText.includes('只要') || lowerText.includes('的场合') && !lowerText.includes('可以')) {
+
+    // 检测永续效果
+    if (lowerText.includes('只要') || (lowerText.includes('的场合') && !lowerText.includes('可以')) ||
+        lowerText.includes('持续') || lowerText.includes('continuous')) {
       return 'EFFECT_TYPE_CONTINUOUS';
     }
-    
+
+    // 默认返回起动效果
     return 'EFFECT_TYPE_IGNITION';
   }
   
