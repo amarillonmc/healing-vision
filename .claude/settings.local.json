@@ -3,7 +3,9 @@
     "allow": [
       "Bash(cd script-generator && npm run build 2>&1)",
       "Bash(ls:*)",
-      "Bash(cd /d/Users/nemom/Documents/GitHub/healing-vision/script-generator && npm run build 2>&1)"
+      "Bash(cd /d/Users/nemom/Documents/GitHub/healing-vision/script-generator && npm run build 2>&1)",
+      "Bash(cd /d/Users/nemom/Documents/GitHub/healing-vision/script-generator && npm run dev test 2>&1)",
+      "Bash(head:*)"
     ]
   }
 }
