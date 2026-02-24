@@ -7,13 +7,14 @@ import { createReader, CDBReader, Language } from './data/cdb-reader.js';
 import { createParser, EffectParser } from './parser/effect-parser.js';
 import { createGenerator, ScriptGenerator } from './generator/script-generator.js';
 import { createLLMGenerator, LLMGenerator } from './generator/llm-generator.js';
+import { createCLILLMGenerator, CLILLMGenerator } from './generator/cli-llm-generator.js';
 
 const program = new Command();
 
 program
   .name('ygo-gen')
   .description('Generate ygopro Lua scripts from card effect text')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .command('generate')
@@ -23,20 +24,22 @@ program
   .option('-l, --lang <language>', 'Language (zh-CN, en-US, ja-JP)', 'zh-CN')
   .option('-o, --output <path>', 'Output directory', './output')
   .option('--setcode <number>', 'Custom setcode')
-  .option('--use-llm', 'Use LLM for complex effects', false)
+  .option('--use-llm', 'Use LLM for complex effects (requires API key)', false)
+  .option('--use-cli-llm', 'Use CLI built-in LLM (Claude Code or OpenCode)', false)
+  .option('--llm-provider <provider>', 'CLI LLM provider (claude-code or open-code)', 'auto-detect')
   .option('--dry-run', 'Print script without writing file', false)
   .action(async (options) => {
     const cardId = parseInt(options.id, 10);
     const language = options.lang as Language;
     const outputDir = options.output;
-    
+
     let effectText = options.effect;
     if (fs.existsSync(effectText)) {
       effectText = fs.readFileSync(effectText, 'utf-8');
     }
-    
+
     console.log(`Generating script for card ${cardId}...`);
-    
+
     try {
       const reader = createReader(language);
       reader.open();
@@ -53,8 +56,41 @@ program
 
       let scriptContent: string;
 
-      if (options.useLlm && LLMGenerator.needsLLM(parsedEffects)) {
-        console.log('Using LLM for complex effects...');
+      // 决定使用哪种生成方式
+      const useCLI = options.useCliLlm;
+      const useAPI = options.useLlm;
+      const needsLLM = CLILLMGenerator.needsLLM(parsedEffects);
+
+      if (useCLI && needsLLM) {
+        console.log('Using CLI built-in LLM for complex effects...');
+        const cliLlmGenerator = createCLILLMGenerator({
+          provider: options.llmProvider === 'auto-detect' ? undefined : options.llmProvider,
+        });
+        try {
+          scriptContent = await cliLlmGenerator.generate({
+            cardId,
+            cardName,
+            effectText,
+            parsedEffects,
+            cardData,
+            language,
+          });
+          cliLlmGenerator.cleanup();
+        } catch (error) {
+          console.error('CLI LLM failed, falling back to basic generator...');
+          const generator = createGenerator();
+          const result = generator.generate({
+            cardId,
+            cardName,
+            effects: parsedEffects,
+            cardData,
+            language,
+            customSetcode: options.setcode ? parseInt(options.setcode, 10) : undefined,
+          });
+          scriptContent = result.content;
+        }
+      } else if (useAPI && LLMGenerator.needsLLM(parsedEffects)) {
+        console.log('Using API LLM for complex effects...');
         const llmGenerator = createLLMGenerator();
         scriptContent = await llmGenerator.generate({
           cardId,
@@ -76,7 +112,7 @@ program
         });
         scriptContent = result.content;
       }
-      
+
       if (options.dryRun) {
         console.log('\n--- Generated Script ---\n');
         console.log(scriptContent);
@@ -85,12 +121,12 @@ program
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true });
         }
-        
+
         const outputPath = path.join(outputDir, `c${cardId}.lua`);
         fs.writeFileSync(outputPath, scriptContent);
         console.log(`Script saved to: ${outputPath}`);
       }
-      
+
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       process.exit(1);

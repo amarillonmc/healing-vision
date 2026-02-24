@@ -1,7 +1,7 @@
 {
   "name": "ygopro-script-generator",
-  "version": "0.1.0",
-  "description": "Generate ygopro Lua scripts from effect text",
+  "version": "0.2.0",
+  "description": "Generate ygopro Lua scripts from effect text with CLI built-in LLM support",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -13,6 +13,7 @@
     "start": "node dist/cli.js",
     "extract-api": "tsx src/data/extract-api.ts",
     "test": "tsx test/test-example.ts",
+    "test:cli-llm": "tsx test/test-cli-llm.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
