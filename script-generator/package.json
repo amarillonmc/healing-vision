@@ -1,0 +1,30 @@
+{
+  "name": "ygopro-script-generator",
+  "version": "0.1.0",
+  "description": "Generate ygopro Lua scripts from effect text",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ygo-gen": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "extract-api": "tsx src/data/extract-api.ts",
+    "test": "tsx test/test-example.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "commander": "^12.0.0",
+    "ejs": "^3.1.10"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/ejs": "^3.1.5",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,271 @@
+import * as ejs from 'ejs';
+import * as path from 'path';
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
+import { ParsedEffect, ParseResult } from '../parser/effect-parser.js';
+import { FullCard } from '../data/cdb-reader.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export interface GenerationOptions {
+  cardId: number;
+  cardName: string;
+  effects: ParseResult;
+  cardData?: FullCard;
+  language: string;
+  customSetcode?: number;
+}
+
+export interface GeneratedScript {
+  filename: string;
+  content: string;
+  cardId: number;
+}
+
+export class ScriptGenerator {
+  private templatesDir: string;
+
+  constructor() {
+    this.templatesDir = path.join(__dirname, 'templates');
+  }
+
+  generate(options: GenerationOptions): GeneratedScript {
+    const { cardId, cardName, effects, cardData, language } = options;
+    
+    const effectCodes = effects.effects.map((effect, index) => 
+      this.generateEffectCode(effect, cardId, index, cardData)
+    );
+    
+    const helperFunctions = this.generateHelpers(effects.effects, cardId);
+    
+    const template = this.getBaseTemplate();
+    const content = ejs.render(template, {
+      cardId,
+      cardName,
+      effects: effectCodes.join('\n'),
+      helperFunctions,
+      language,
+    });
+    
+    return {
+      filename: `c${cardId}.lua`,
+      content: this.formatLua(content),
+      cardId,
+    };
+  }
+
+  private generateEffectCode(effect: ParsedEffect, cardId: number, index: number, cardData?: FullCard): string {
+    const lines: string[] = [];
+    const effectVar = `e${index + 1}`;
+    
+    lines.push(`-- ${this.getEffectComment(effect, index)}`);
+    lines.push(`local ${effectVar}=Duel.CreateEffect(c)`);
+    
+    if (effect.description) {
+      lines.push(`${effectVar}:SetDescription(aux.Stringid(${cardId},${index}))`);
+    }
+    
+    const categories = this.formatCategories(effect.categories);
+    if (categories) {
+      lines.push(`${effectVar}:SetCategory(${categories})`);
+    }
+    
+    lines.push(`${effectVar}:SetType(${effect.effectType})`);
+    
+    if (effect.triggerEvent) {
+      lines.push(`${effectVar}:SetCode(${effect.triggerEvent})`);
+    }
+    
+    const range = this.inferRange(effect, cardData);
+    if (range) {
+      lines.push(`${effectVar}:SetRange(${range})`);
+    }
+    
+    if (effect.hasCost) {
+      lines.push(`${effectVar}:SetCost(c${cardId}.cost${index > 0 ? index + 1 : ''})`);
+    }
+    
+    if (effect.hasTarget) {
+      lines.push(`${effectVar}:SetTarget(c${cardId}.target${index > 0 ? index + 1 : ''})`);
+    }
+    
+    lines.push(`${effectVar}:SetOperation(c${cardId}.operation${index > 0 ? index + 1 : ''})`);
+    
+    if (effect.restrictions.includes('once per turn')) {
+      lines.push(`${effectVar}:SetCountLimit(1)`);
+    }
+    
+    lines.push(`c:RegisterEffect(${effectVar})`);
+    
+    return lines.join('\n\t');
+  }
+
+  private generateHelpers(effects: ParsedEffect[], cardId: number): string {
+    const helpers: string[] = [];
+    
+    effects.forEach((effect, index) => {
+      const suffix = index > 0 ? (index + 1).toString() : '';
+      
+      if (effect.hasCost) {
+        helpers.push(this.generateCostFunction(effect, cardId, suffix));
+      }
+      
+      if (effect.hasTarget) {
+        helpers.push(this.generateTargetFunction(effect, cardId, suffix));
+      }
+      
+      helpers.push(this.generateOperationFunction(effect, cardId, suffix));
+    });
+    
+    return helpers.join('\n');
+  }
+
+  private generateCostFunction(effect: ParsedEffect, cardId: number, suffix: string): string {
+    const lines: string[] = [];
+    lines.push(`function c${cardId}.cost${suffix}(e,tp,eg,ep,ev,re,r,rp,chk)`);
+    lines.push(`\tif chk==0 then return true end`);
+    lines.push(`\t-- TODO: Implement cost logic for: ${effect.description}`);
+    lines.push(`end`);
+    return lines.join('\n');
+  }
+
+  private generateTargetFunction(effect: ParsedEffect, cardId: number, suffix: string): string {
+    const lines: string[] = [];
+    lines.push(`function c${cardId}.target${suffix}(e,tp,eg,ep,ev,re,r,rp,chk,chkc)`);
+    lines.push(`\tif chkc then return chkc:IsLocation(LOCATION_ONFIELD) end`);
+    lines.push(`\tif chk==0 then return Duel.IsExistingTarget(nil,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,nil) end`);
+    lines.push(`\tDuel.Hint(HINT_SELECTMSG,tp,HINTMSG_TARGET)`);
+    lines.push(`\tDuel.SelectTarget(tp,nil,tp,LOCATION_ONFIELD,LOCATION_ONFIELD,1,1,nil)`);
+    lines.push(`\t-- TODO: Implement target logic for: ${effect.description}`);
+    lines.push(`end`);
+    return lines.join('\n');
+  }
+
+  private generateOperationFunction(effect: ParsedEffect, cardId: number, suffix: string): string {
+    const lines: string[] = [];
+    lines.push(`function c${cardId}.operation${suffix}(e,tp,eg,ep,ev,re,r,rp)`);
+    lines.push(`\tlocal c=e:GetHandler()`);
+    
+    const operations = this.inferOperations(effect);
+    lines.push(`\t${operations}`);
+    lines.push(`\t-- TODO: Implement operation logic for: ${effect.description}`);
+    lines.push(`end`);
+    return lines.join('\n');
+  }
+
+  private inferOperations(effect: ParsedEffect): string {
+    const keywords = effect.keywords.map(k => k.toLowerCase());
+    
+    if (keywords.some(k => k.includes('破坏'))) {
+      return `Duel.Destroy(Duel.GetTargetsRelateToChain(),REASON_EFFECT)`;
+    }
+    if (keywords.some(k => k.includes('特殊召唤'))) {
+      return `local tc=Duel.GetFirstTarget()\n\tif tc and tc:IsRelateToEffect(e) then\n\t\tDuel.SpecialSummon(tc,0,tp,tp,false,false,POS_FACEUP)\n\tend`;
+    }
+    if (keywords.some(k => k.includes('抽卡'))) {
+      return `Duel.Draw(tp,1,REASON_EFFECT)`;
+    }
+    if (keywords.some(k => k.includes('加入手卡'))) {
+      return `local tc=Duel.GetFirstTarget()\n\tif tc and tc:IsRelateToEffect(e) then\n\t\tDuel.SendtoHand(tc,nil,REASON_EFFECT)\n\tend`;
+    }
+    if (keywords.some(k => k.includes('送去墓地'))) {
+      return `local tc=Duel.GetFirstTarget()\n\tif tc and tc:IsRelateToEffect(e) then\n\t\tDuel.SendtoGrave(tc,REASON_EFFECT)\n\tend`;
+    }
+    if (keywords.some(k => k.includes('除外'))) {
+      return `local tc=Duel.GetFirstTarget()\n\tif tc and tc:IsRelateToEffect(e) then\n\t\tDuel.Remove(tc,POS_FACEUP,REASON_EFFECT)\n\tend`;
+    }
+    
+    return `-- Operation needs implementation`;
+  }
+
+  private getEffectComment(effect: ParsedEffect, index: number): string {
+    const desc = effect.description.substring(0, 50);
+    return `Effect ${index + 1}: ${desc}${desc.length >= 50 ? '...' : ''}`;
+  }
+
+  private formatCategories(categories: number[]): string {
+    if (categories.length === 0) return '';
+    
+    return categories
+      .map(cat => this.categoryToConstant(cat))
+      .filter(Boolean)
+      .join('+');
+  }
+
+  private categoryToConstant(cat: number): string {
+    const categoryMap: Record<number, string> = {
+      0x1: 'CATEGORY_DESTROY',
+      0x2: 'CATEGORY_RELEASE',
+      0x4: 'CATEGORY_TOHAND',
+      0x8: 'CATEGORY_TODECK',
+      0x10: 'CATEGORY_TOGRAVE',
+      0x20: 'CATEGORY_REMOVE',
+      0x40: 'CATEGORY_SPECIAL_SUMMON',
+      0x80: 'CATEGORY_DRAW',
+      0x100: 'CATEGORY_DAMAGE',
+      0x200: 'CATEGORY_RECOVER',
+      0x400: 'CATEGORY_DECKDES',
+      0x800: 'CATEGORY_HANDDES',
+      0x1000: 'CATEGORY_SUMMON',
+      0x2000: 'CATEGORY_FLIP',
+      0x4000: 'CATEGORY_POSITION',
+      0x8000: 'CATEGORY_CONTROL',
+      0x10000: 'CATEGORY_DISABLE',
+      0x20000: 'CATEGORY_ATKCHANGE',
+      0x40000: 'CATEGORY_DEFCHANGE',
+      0x80000: 'CATEGORY_COUNTER',
+      0x100000: 'CATEGORY_EQUIP',
+    };
+    
+    return categoryMap[cat] || '';
+  }
+
+  private inferRange(effect: ParsedEffect, cardData?: FullCard): string {
+    const keywords = effect.keywords.map(k => k.toLowerCase());
+    
+    if (keywords.some(k => k.includes('墓地'))) {
+      return 'LOCATION_GRAVE';
+    }
+    if (keywords.some(k => k.includes('手卡'))) {
+      return 'LOCATION_HAND';
+    }
+    if (keywords.some(k => k.includes('除外'))) {
+      return 'LOCATION_REMOVED';
+    }
+    
+    if (cardData) {
+      if (cardData.type & 0x2) return 'LOCATION_SZONE';
+      if (cardData.type & 0x4) return 'LOCATION_SZONE';
+    }
+    
+    return 'LOCATION_MZONE';
+  }
+
+  private getBaseTemplate(): string {
+    const templatePath = path.join(this.templatesDir, 'base.ejs');
+    if (fs.existsSync(templatePath)) {
+      return fs.readFileSync(templatePath, 'utf-8');
+    }
+    
+    return `-- <%= cardName %>
+-- Card ID: <%= cardId %>
+-- Generated by ygopro-script-generator
+
+function c<%= cardId %>.initial_effect(c)
+\t<%= effects %>
+end
+<%= helperFunctions %>`;
+  }
+
+  private formatLua(code: string): string {
+    return code
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/\t\n/g, '\n')
+      .trim() + '\n';
+  }
+}
+
+export function createGenerator(): ScriptGenerator {
+  return new ScriptGenerator();
+}
