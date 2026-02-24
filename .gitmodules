@@ -1,0 +1,9 @@
+[submodule "ygopro-database"]
+	path = ygopro-database
+	url = https://github.com/mycard/ygopro-database
+[submodule "ygopro-scripts"]
+	path = ygopro-scripts
+	url = https://github.com/Smile-DK/ygopro-scripts
+[submodule "ygopro-core"]
+	path = ygopro-core
+	url = https://github.com/purerosefallen/ygopro-core
